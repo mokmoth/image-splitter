@@ -3,6 +3,18 @@ import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
+/**
+ * 图片切分工具主组件
+ * @version 1.0.0
+ * @author Rice_LIN
+ * 
+ * 主要功能：
+ * 1. 图片上传和预览
+ * 2. 多种切分模式支持
+ * 3. 实时预览
+ * 4. 自定义切分
+ */
+
 function App() {
   // ===== 状态管理 =====
   // 图片相关状态
