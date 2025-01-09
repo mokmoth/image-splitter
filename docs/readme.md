@@ -2,6 +2,8 @@
 
 一个基于 React 和 Tailwind CSS 的在线图片切分工具，支持多种切分模式和自定义选项。
 
+🌐 **在线体验**: [https://mokmoth.github.io/image-splitter](https://mokmoth.github.io/image-splitter)
+
 ## 功能特点
 
 ### 1. 多样化的切分模式
