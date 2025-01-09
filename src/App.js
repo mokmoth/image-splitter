@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -9,55 +9,95 @@ import { saveAs } from 'file-saver';
  * @author Rice_LIN
  * 
  * 主要功能：
- * 1. 图片上传和预览
- * 2. 多种切分模式支持
- * 3. 实时预览
- * 4. 自定义切分
+ * 1. 图片上传和预览：支持多图片上传，提供实时预览
+ * 2. 多种切分模式：
+ *    - 均分模式：按指定数量平均切分
+ *    - 固定尺寸模式：按指定像素大小切分
+ *    - 自定义模式：手动调整切分位置
+ * 3. 实时预览：切分效果实时可见
+ * 4. 自定义切分：支持拖拽调整切分位置
+ * 5. 批量处理：支持多图片批量切分
+ * 6. 灵活配置：支持设置输出格式、文件名等
  */
 
 function App() {
   // ===== 状态管理 =====
-  // 图片相关状态
-  const [imageInfo, setImageInfo] = useState(null);        // 存储图片信息（尺寸、格式等）
-  const [showFullImage, setShowFullImage] = useState(false); // 控制全屏预览模态框
+  /**
+   * 图片相关状态
+   * imageInfoList: 存储所有上传图片的信息数组
+   * currentImageIndex: 当前选中的图片索引
+   * showImageList: 控制全屏预览模态框的显示状态
+   */
+  const [imageInfoList, setImageInfoList] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showImageList, setShowImageList] = useState(false);
 
-  // 切分设置相关状态
-  const [splitDirection, setSplitDirection] = useState('vertical');  // 切分方向：vertical/horizontal
-  const [splitMode, setSplitMode] = useState('count');     // 切分模式：count/fixed/custom
-  const [splitSize, setSplitSize] = useState(100);         // 固定尺寸模式下的切分尺寸
-  const [splitCount, setSplitCount] = useState(2);         // 均分数量模式下的切分数量
-  const [customSlices, setCustomSlices] = useState([]);    // 自定义模式下的切分位置
+  /**
+   * 切分设置相关状态
+   * splitDirection: 切分方向，'vertical'(纵向)或'horizontal'(横向)
+   * splitMode: 切分模式，'count'(均分)、'fixed'(固定尺寸)或'custom'(自定义)
+   * splitSize: 固定尺寸模式下的切分尺寸（像素）
+   * splitCount: 均分模式下的切分数量
+   * customSlices: 自定义模式下的切分位置数组（百分比）
+   */
+  const [splitDirection, setSplitDirection] = useState('vertical');
+  const [splitMode, setSplitMode] = useState('count');
+  const [splitSize, setSplitSize] = useState(100);
+  const [splitCount, setSplitCount] = useState(2);
+  const [customSlices, setCustomSlices] = useState([]);
 
-  // 输出设置相关状态
-  const [outputFormat, setOutputFormat] = useState('jpeg'); // 输出格式
-  const [namePattern, setNamePattern] = useState('slice'); // 文件名前缀
-  const [numberDigits, setNumberDigits] = useState(2);     // 序号位数
-  const [separator, setSeparator] = useState('_');         // 连接符号
+  /**
+   * 输出设置相关状态
+   * outputFormat: 输出图片格式，支持'jpeg'、'png'、'webp'
+   * namePattern: 输出文件名前缀
+   * numberDigits: 序号位数
+   * separator: 文件名与序号之间的连接符
+   */
+  const [outputFormat, setOutputFormat] = useState('jpeg');
+  const [namePattern, setNamePattern] = useState('slice');
+  const [numberDigits, setNumberDigits] = useState(2);
+  const [separator, setSeparator] = useState('_');
 
-  // UI 交互相关状态
-  const [splitAreaWidth, setSplitAreaWidth] = useState(40);    // 预览区域宽度百分比
-  const [draggingSliceIndex, setDraggingSliceIndex] = useState(null); // 当前拖动的分割线索引
-  const [showSliceSizes, setShowSliceSizes] = useState(true);  // 是否显示尺寸标注
-  const [justFinishedDragging, setJustFinishedDragging] = useState(false); // 防止拖动结束时触发预览
-  const [copySuccess, setCopySuccess] = useState(false);    // 复制成功提示状态
+  /**
+   * UI 交互相关状态
+   * splitAreaWidth: 预览区域宽度百分比
+   * draggingSliceIndex: 当前正在拖动的分割线索引
+   * showSliceSizes: 是否显示切片尺寸信息
+   * justFinishedDragging: 防止拖动结束时触发预览
+   * copySuccess: 复制成功提示状态
+   */
+  const [splitAreaWidth, setSplitAreaWidth] = useState(40);
+  const [draggingSliceIndex, setDraggingSliceIndex] = useState(null);
+  const [showSliceSizes, setShowSliceSizes] = useState(true);
+  const [justFinishedDragging, setJustFinishedDragging] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // ===== Refs =====
-  const previewCanvasRef = useRef(null);  // 预览画布的引用
-  const isDraggingRef = useRef(false);    // 跟踪拖动状态
-  const containerRef = useRef(null);       // 容器元素的引用
+  /**
+   * previewCanvasRef: 预览画布的引用，用于绘制预览图
+   * isDraggingRef: 跟踪拖动状态的引用
+   * containerRef: 主容器元素的引用
+   */
+  const previewCanvasRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef(null);
 
-  // ===== 文件上传处理 =====
+  /**
+   * 文件上传处理函数
+   * 处理用户拖放或选择的图片文件
+   * 1. 为每个文件创建Image对象并加载
+   * 2. 收集每个图片的详细信息（尺寸、格式等）
+   * 3. 更新状态并初始化相关设置
+   */
   const onDrop = async (acceptedFiles) => {
-    const file = acceptedFiles[0];
-    if (file) {
+    const imagePromises = acceptedFiles.map(file => new Promise((resolve) => {
       const img = new Image();
       img.src = URL.createObjectURL(file);
       
-      // 获取文件名（不包含扩展名）
       const fileName = file.name.replace(/\.[^/.]+$/, "");
       
       img.onload = () => {
-        setImageInfo({
+        resolve({
           file: file,
           name: file.name,
           width: img.width,
@@ -66,55 +106,51 @@ function App() {
           size: file.size,
           image: img
         });
-        // 设置默认文件名前缀为原文件名
-        setNamePattern(fileName);
       };
+    }));
+
+    const imageInfos = await Promise.all(imagePromises);
+    setImageInfoList(imageInfos);
+    setCurrentImageIndex(0);
+    
+    // 在非自定义模式下，使用原文件名作为前缀
+    if (splitMode !== 'custom') {
+      setNamePattern('');
+    } else {
+      setNamePattern(imageInfos[0].name.replace(/\.[^/.]+$/, ""));
     }
   };
 
-  // 配置文件拖放区域
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.webp']
-    },
-    multiple: false,
-    onDrop
-  });
-
-  // ===== 图片切分核心功能 =====
-  const splitImage = async () => {
-    if (!imageInfo) return;
-
+  /**
+   * 切分单张图片
+   * @param {Object} imageInfo - 要切分的图片信息对象
+   * 
+   * 处理流程：
+   * 1. 创建画布和压缩包
+   * 2. 根据切分模式计算切分位置
+   * 3. 逐个生成切片并添加到压缩包
+   * 4. 生成并下载压缩包
+   */
+  const splitSingleImage = async (imageInfo) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const zip = new JSZip();
     
-    // 根据不同模式计算切分位置
-    let slicePositions;
-    if (splitMode === 'custom') {
-      // 自定义模式：使用用户定义的切分位置
-      slicePositions = [0, ...customSlices.map(pos => pos / 100), 1];
-    } else if (splitMode === 'fixed') {
-      // 固定尺寸模式：根据指定像素大小计算切分位置
-      const totalSize = splitDirection === 'horizontal' ? imageInfo.width : imageInfo.height;
-      const sliceSize = splitSize;
-      const count = Math.ceil(totalSize / sliceSize);
-      slicePositions = Array.from({ length: count + 1 }, (_, i) => 
-        Math.min(1, (i * sliceSize) / totalSize)
-      );
-    } else {
-      // 均分模式：平均分配切分位置
-      slicePositions = Array.from({ length: splitCount + 1 }, (_, i) => i / splitCount);
-    }
+    // 使用 namePattern 作为文件夹名，如果为空则使用原文件名
+    const folderName = namePattern.trim() || imageInfo.name.replace(/\.[^/.]+$/, "");
+    const folder = zip.folder(folderName);
+    
+    // 计算切分位置（转换百分比为小数）
+    const slicePositions = [0, ...customSlices.map(pos => pos / 100), 1];
 
-    // 执行切分并生成图片
+    // 生成切片
     for (let i = 0; i < slicePositions.length - 1; i++) {
       const start = slicePositions[i];
       const end = slicePositions[i + 1];
       const sliceSize = end - start;
 
+      // 根据切分方向设置画布尺寸并绘制切片
       if (splitDirection === 'horizontal') {
-        // 横向切分：调整画布宽度，保持高度不变
         const width = Math.round(sliceSize * imageInfo.width);
         canvas.width = width;
         canvas.height = imageInfo.height;
@@ -126,7 +162,6 @@ function App() {
           width, imageInfo.height
         );
       } else {
-        // 纵向切分：调整画布高度，保持宽度不变
         const height = Math.round(sliceSize * imageInfo.height);
         canvas.width = imageInfo.width;
         canvas.height = height;
@@ -139,35 +174,41 @@ function App() {
         );
       }
 
-      // 生成文件名并保存切片
-      const number = String(i + 1).padStart(numberDigits, '0');
-      const fileName = `${namePattern}${separator}${number}.${outputFormat}`;
+      // 生成切片文件并添加到压缩包
+      const fileName = `${folderName}${separator}${String(i + 1).padStart(numberDigits, '0')}.${outputFormat}`;
       const blob = await new Promise(resolve => canvas.toBlob(resolve, `image/${outputFormat}`));
-      zip.file(fileName, blob);
+      folder.file(fileName, blob);
     }
 
-    // 打包并下载所有切片
-    const content = await zip.generateAsync({ type: 'blob' });
-    saveAs(content, 'sliced_images.zip');
+    // 生成并下载压缩包
+    const content = await zip.generateAsync({type: 'blob'});
+    saveAs(content, `${folderName}.zip`);
   };
 
-  // ===== 辅助函数 =====
-  // 计算实际图片中的位置
+  /**
+   * 辅助函数：计算实际图片中的位置
+   * 将预览图中的位置转换为实际图片中的位置
+   */
   const getActualPosition = (previewPos, previewSize, actualSize) => {
     return Math.round((previewPos * actualSize) / previewSize);
   };
 
-  // 计算预览图中的位置
+  /**
+   * 辅助函数：计算预览图中的位置
+   * 将实际图片中的位置转换为预览图中的位置
+   */
   const getPreviewPosition = (actualPos, actualSize, previewSize) => {
     return (actualPos * previewSize) / actualSize;
   };
 
-  // 初始化自定义切分位置
+  /**
+   * 初始化自定义切分位置
+   * 根据指定的切分数量生成均匀分布的切分位置
+   */
   const initializeCustomSlices = (count) => {
     const slices = [];
     const interval = 100 / count;
     
-    // 生成均匀分布的切分位置（百分比）
     for (let i = 1; i < count; i++) {
       slices.push(i * interval);
     }
@@ -175,17 +216,246 @@ function App() {
     setCustomSlices(slices);
   };
 
-  // ===== 预览图相关功能 =====
+  /**
+   * 图片列表组件
+   * 显示所有上传的图片，支持选择和预览
+   */
+  const ImageList = ({ images, currentIndex, onSelect }) => {
+    const listRef = useRef(null);
+
+    return (
+      <div className="mt-4 mb-6 bg-gray-50 rounded-lg p-4 w-full">
+        <h3 className="text-sm font-semibold mb-2">图片列表</h3>
+        <div 
+          ref={listRef}
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 p-1"
+        >
+          {images.map((img, index) => (
+            <div
+              key={`${img.name}-${index}`}
+              className={`p-2 rounded cursor-pointer transition-colors
+                ${index === currentIndex
+                  ? 'bg-blue-100 border-blue-500'
+                  : 'bg-white hover:bg-gray-100'
+                }`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelect(index);
+              }}
+            >
+              <div className="relative aspect-square">
+                <img
+                  src={URL.createObjectURL(img.file)}
+                  alt={img.name}
+                  className="absolute inset-0 w-full h-full object-cover rounded"
+                  loading="lazy"
+                />
+              </div>
+              <p className="text-xs mt-1 truncate">{img.name}</p>
+            </div>
+          ))}
+        </div>
+        <div className="text-xs text-gray-500 mt-2">
+          提示：使用左右键或鼠标滚轮浏览图片列表
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * 键盘导航事件处理
+   * 支持使用方向键在图片列表中导航
+   * - 左右键：在同一行内导航
+   * - 上下键：在不同行之间导航
+   */
   useEffect(() => {
-    if (!imageInfo || !previewCanvasRef.current) return;
+    const handleKeyDown = (e) => {
+      if (imageInfoList.length <= 1 || splitMode !== 'custom') return;
+      
+      // 根据视口宽度确定每行的列数
+      const viewportWidth = window.innerWidth;
+      let columnsPerRow;
+      if (viewportWidth >= 1024) {  // lg
+        columnsPerRow = 5;
+      } else if (viewportWidth >= 768) {  // md
+        columnsPerRow = 4;
+      } else if (viewportWidth >= 640) {  // sm
+        columnsPerRow = 3;
+      } else {  // default
+        columnsPerRow = 2;
+      }
+
+      let nextIndex = currentImageIndex;
+      
+      // 处理方向键导航
+      switch (e.key) {
+        case 'ArrowLeft':
+          nextIndex = currentImageIndex > 0 ? currentImageIndex - 1 : currentImageIndex;
+          break;
+        case 'ArrowRight':
+          nextIndex = currentImageIndex < imageInfoList.length - 1 ? currentImageIndex + 1 : currentImageIndex;
+          break;
+        case 'ArrowUp':
+          nextIndex = currentImageIndex - columnsPerRow;
+          if (nextIndex < 0) nextIndex = currentImageIndex;
+          break;
+        case 'ArrowDown':
+          nextIndex = currentImageIndex + columnsPerRow;
+          if (nextIndex >= imageInfoList.length) nextIndex = currentImageIndex;
+          break;
+        default:
+          return;
+      }
+
+      // 只在索引发生变化时更新状态
+      if (nextIndex !== currentImageIndex) {
+        setCurrentImageIndex(nextIndex);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [imageInfoList.length, splitMode, currentImageIndex]);
+
+  // ===== 文件上传配置 =====
+  /**
+   * 配置文件拖放区域
+   * 使用 react-dropzone 处理文件上传
+   * - accept: 限制只接受图片文件
+   * - multiple: 允许多文件上传
+   * - onDrop: 文件上传后的处理函数
+   */
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.webp']
+    },
+    multiple: true,
+    onDrop
+  });
+
+  /**
+   * 批量切分图片
+   * 处理所有上传的图片，生成切片并打包下载
+   * 
+   * 处理流程：
+   * 1. 创建画布和压缩包
+   * 2. 遍历处理每张图片
+   * 3. 根据不同模式计算切分位置
+   * 4. 生成切片并添加到压缩包
+   * 5. 最终打包下载
+   */
+  const splitImage = async () => {
+    if (imageInfoList.length === 0) return;
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const zip = new JSZip();
+    
+    // 处理所有图片
+    for (const imageInfo of imageInfoList) {
+      // 确定文件夹名称
+      let folderName;
+      if (splitMode === 'custom' && imageInfo.file.name === imageInfoList[currentImageIndex].file.name) {
+        // 自定义模式下当前图片使用设置的文件名前缀
+        folderName = namePattern.trim() || imageInfo.name.replace(/\.[^/.]+$/, "");
+      } else {
+        // 其他情况使用原文件名
+        folderName = imageInfo.name.replace(/\.[^/.]+$/, "");
+      }
+      
+      const folder = zip.folder(folderName);
+    
+      // 根据不同模式计算切分位置
+      let slicePositions;
+      if (splitMode === 'custom') {
+        // 自定义模式：当前图片使用自定义位置，其他图片使用均分
+        if (imageInfo === imageInfoList[currentImageIndex]) {
+          slicePositions = [0, ...customSlices.map(pos => pos / 100), 1];
+        } else {
+          const count = customSlices.length + 1;
+          slicePositions = Array.from({ length: count + 1 }, (_, i) => i / count);
+        }
+      } else if (splitMode === 'fixed') {
+        // 固定尺寸模式：根据指定像素计算位置
+        const totalSize = splitDirection === 'horizontal' ? imageInfo.width : imageInfo.height;
+        const sliceSize = splitSize;
+        const count = Math.ceil(totalSize / sliceSize);
+        slicePositions = Array.from({ length: count + 1 }, (_, i) => 
+          Math.min(1, (i * sliceSize) / totalSize)
+        );
+      } else {
+        // 均分模式：平均分配位置
+        slicePositions = Array.from({ length: splitCount + 1 }, (_, i) => i / splitCount);
+      }
+
+      // 生成切片
+      for (let i = 0; i < slicePositions.length - 1; i++) {
+        const start = slicePositions[i];
+        const end = slicePositions[i + 1];
+        const sliceSize = end - start;
+
+        // 根据切分方向设置画布尺寸并绘制
+        if (splitDirection === 'horizontal') {
+          const width = Math.round(sliceSize * imageInfo.width);
+          canvas.width = width;
+          canvas.height = imageInfo.height;
+          ctx.drawImage(
+            imageInfo.image,
+            Math.round(start * imageInfo.width), 0,
+            width, imageInfo.height,
+            0, 0,
+            width, imageInfo.height
+          );
+        } else {
+          const height = Math.round(sliceSize * imageInfo.height);
+          canvas.width = imageInfo.width;
+          canvas.height = height;
+          ctx.drawImage(
+            imageInfo.image,
+            0, Math.round(start * imageInfo.height),
+            imageInfo.width, height,
+            0, 0,
+            imageInfo.width, height
+          );
+        }
+
+        // 生成切片文件并添加到压缩包
+        const prefix = folderName;
+        const fileName = `${prefix}${separator}${String(i + 1).padStart(numberDigits, '0')}.${outputFormat}`;
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, `image/${outputFormat}`));
+        folder.file(fileName, blob);
+      }
+    }
+
+    // 生成并下载 ZIP 文件
+    const content = await zip.generateAsync({type: 'blob'});
+    const zipFileName = splitMode === 'custom' 
+      ? (imageInfoList.length > 1 ? `split_images_${new Date().getTime()}.zip` : `${namePattern}.zip`)
+      : `split_images_${new Date().getTime()}.zip`;
+    saveAs(content, zipFileName);
+  };
+
+  /**
+   * 预览图相关功能
+   * 处理预览图的绘制和分割线显示
+   * 
+   * 功能：
+   * 1. 计算并设置预览图尺寸
+   * 2. 绘制当前选中的图片
+   * 3. 根据切分模式显示分割线
+   * 4. 自定义模式下支持拖动分割线
+   */
+  useEffect(() => {
+    if (!imageInfoList[currentImageIndex] || !previewCanvasRef.current) return;
 
     const canvas = previewCanvasRef.current;
     const ctx = canvas.getContext('2d');
     const maxPreviewSize = 400; // 预览图最大尺寸
     
     // 计算预览图尺寸，保持宽高比
-    let previewWidth = imageInfo.width;
-    let previewHeight = imageInfo.height;
+    let previewWidth = imageInfoList[currentImageIndex].width;
+    let previewHeight = imageInfoList[currentImageIndex].height;
     if (previewWidth > maxPreviewSize || previewHeight > maxPreviewSize) {
       const ratio = Math.min(maxPreviewSize / previewWidth, maxPreviewSize / previewHeight);
       previewWidth *= ratio;
@@ -195,7 +465,7 @@ function App() {
     // 设置画布尺寸并绘制图片
     canvas.width = previewWidth;
     canvas.height = previewHeight;
-    ctx.drawImage(imageInfo.image, 0, 0, previewWidth, previewHeight);
+    ctx.drawImage(imageInfoList[currentImageIndex].image, 0, 0, previewWidth, previewHeight);
     
     // 清理或创建覆盖层容器
     let overlayContainer = canvas.parentElement.querySelector('.overlay-container');
@@ -212,7 +482,7 @@ function App() {
     if (splitMode === 'custom') {
       slicePositions = customSlices;
     } else if (splitMode === 'fixed') {
-      const totalSize = splitDirection === 'horizontal' ? imageInfo.width : imageInfo.height;
+      const totalSize = splitDirection === 'horizontal' ? imageInfoList[currentImageIndex].width : imageInfoList[currentImageIndex].height;
       const sliceSize = splitSize;
       const count = Math.ceil(totalSize / sliceSize);
       slicePositions = Array.from({ length: count - 1 }, (_, i) => 
@@ -245,7 +515,6 @@ function App() {
             transition-transform cursor-move`;
           line.appendChild(handle);
         } else {
-          // 恢复纵向分割线代码
           line.className += ' h-[3px] w-full -mt-[1.5px]';
           line.style.top = `${slice}%`;
           
@@ -287,10 +556,12 @@ function App() {
         overlayContainer.remove();
       }
     };
-  }, [imageInfo, splitDirection, splitMode, splitSize, splitCount, customSlices]);
+  }, [imageInfoList, currentImageIndex, splitDirection, splitMode, splitSize, splitCount, customSlices]);
 
-  // ===== 拖动相关事件处理 =====
-  // 处理预览区域和设置区域的分隔条拖动
+  /**
+   * 拖动相关事件处理
+   * 处理预览区域和设置区域的分隔条拖动
+   */
   const handleDragStart = () => {
     isDraggingRef.current = true;
     document.body.style.cursor = 'col-resize';
@@ -316,7 +587,10 @@ function App() {
     document.body.style.userSelect = 'auto';
   };
 
-  // ===== 分割线拖动处理 =====
+  /**
+   * 分割线拖动处理
+   * 处理自定义模式下分割线的拖动
+   */
   const handlePreviewMouseMove = (e) => {
     if (splitMode !== 'custom' || draggingSliceIndex === null) return;
 
@@ -324,6 +598,7 @@ function App() {
     const rect = canvas.getBoundingClientRect();
     const isHorizontal = splitDirection === 'horizontal';
     
+    // 计算拖动位置（百分比）
     let position;
     if (isHorizontal) {
       position = ((e.clientX - rect.left) / rect.width) * 100;
@@ -339,6 +614,7 @@ function App() {
     
     position = Math.max(minPos, Math.min(maxPos, position));
 
+    // 更新分割线位置
     const newSlices = [...customSlices];
     newSlices[draggingSliceIndex] = position;
     setCustomSlices(newSlices);
@@ -356,8 +632,10 @@ function App() {
     }
   };
 
-  // ===== 全局鼠标事件监听 =====
-  // 监听预览区域和设置区域分隔条的拖动
+  /**
+   * 全局鼠标事件监听
+   * 处理拖动相关的全局事件
+   */
   useEffect(() => {
     const handleMouseMove = (e) => handleDrag(e);
     const handleMouseUp = () => handleDragEnd();
@@ -392,15 +670,17 @@ function App() {
     };
   }, [splitMode, draggingSliceIndex, customSlices]);
 
-  // ===== 其他功能处理 =====
-  // 复制图片信息功能
+  /**
+   * 复制图片信息功能
+   * 将当前选中图片的信息复制到剪贴板
+   */
   const copyImageInfo = async () => {
-    if (!imageInfo) return;
+    if (!imageInfoList[currentImageIndex]) return;
 
-    const info = `文件名: ${imageInfo.name}
-尺寸: ${imageInfo.width} x ${imageInfo.height}px
-格式: ${imageInfo.format}
-文件大小: ${(imageInfo.size / 1024).toFixed(2)}KB`;
+    const info = `文件名: ${imageInfoList[currentImageIndex].name}
+尺寸: ${imageInfoList[currentImageIndex].width} x ${imageInfoList[currentImageIndex].height}px
+格式: ${imageInfoList[currentImageIndex].format}
+文件大小: ${(imageInfoList[currentImageIndex].size / 1024).toFixed(2)}KB`;
 
     try {
       await navigator.clipboard.writeText(info);
@@ -411,7 +691,10 @@ function App() {
     }
   };
 
-  // 切分模式变更处理
+  /**
+   * 切分模式变更处理
+   * 处理切分模式切换时的状态更新
+   */
   const handleSplitModeChange = (e) => {
     const newMode = e.target.value;
     setSplitMode(newMode);
@@ -420,9 +703,12 @@ function App() {
     }
   };
 
-  // 计算切片尺寸信息
+  /**
+   * 计算切片尺寸信息
+   * 计算每个切片的实际像素尺寸
+   */
   const calculateSliceSizes = () => {
-    if (!imageInfo) return [];
+    if (!imageInfoList[currentImageIndex]) return [];
     
     const slices = [0, ...customSlices, 100];
     const sizes = [];
@@ -433,17 +719,17 @@ function App() {
       const percentage = end - start;
       
       if (splitDirection === 'horizontal') {
-        const width = Math.round((percentage / 100) * imageInfo.width);
+        const width = Math.round((percentage / 100) * imageInfoList[currentImageIndex].width);
         sizes.push({
           index: i + 1,
           width,
-          height: imageInfo.height
+          height: imageInfoList[currentImageIndex].height
         });
       } else {
-        const height = Math.round((percentage / 100) * imageInfo.height);
+        const height = Math.round((percentage / 100) * imageInfoList[currentImageIndex].height);
         sizes.push({
           index: i + 1,
-          width: imageInfo.width,
+          width: imageInfoList[currentImageIndex].width,
           height
         });
       }
@@ -452,7 +738,10 @@ function App() {
     return sizes;
   };
 
-  // 添加切分数量变更处理函数
+  /**
+   * 切分数量变更处理
+   * 更新切分数量并在自定义模式下重新初始化分割线
+   */
   const handleSplitCountChange = (e) => {
     const newCount = Number(e.target.value);
     setSplitCount(newCount);
@@ -463,23 +752,26 @@ function App() {
     }
   };
 
-  // ===== 渲染界面 =====
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-7xl mx-auto bg-white rounded-lg shadow p-6">
-        {/* 标题 */}
         <h1 className="text-2xl font-bold mb-6 text-black">Image Splitter</h1>
         
-        {/* 文件上传区域 */}
         <div {...getRootProps()} className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-gray-400">
           <input {...getInputProps()} />
           <p className="text-gray-600">拖放图片到此处，或点击选择图片</p>
         </div>
 
-        {/* 主要功能区域 */}
-        {imageInfo && (
+        {imageInfoList.length > 1 && splitMode === 'custom' && (
+          <ImageList
+            images={imageInfoList}
+            currentIndex={currentImageIndex}
+            onSelect={setCurrentImageIndex}
+          />
+        )}
+
+        {imageInfoList.length > 0 && (
           <div ref={containerRef} className="mt-6 flex flex-col md:flex-row gap-0 relative">
-            {/* 预览区域 */}
             <div className="md:relative md:pr-4" style={{ width: `${splitAreaWidth}%` }}>
               <div className="sticky top-8">
                 <h2 className="text-lg font-semibold mb-2 text-black">预览</h2>
@@ -490,7 +782,7 @@ function App() {
                       className="border rounded w-full cursor-pointer hover:brightness-95 transition-all"
                       onClick={() => {
                         if (!draggingSliceIndex && !justFinishedDragging) {
-                          setShowFullImage(true);
+                          setShowImageList(true);
                         }
                       }}
                       style={{ cursor: splitMode === 'custom' ? 'default' : 'pointer' }}
@@ -511,7 +803,6 @@ function App() {
                       </svg>
                       {copySuccess ? '已复制' : '复制信息'}
                       
-                      {/* 复制成功提示 */}
                       {copySuccess && (
                         <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
                           复制成功
@@ -521,16 +812,15 @@ function App() {
                   </div>
                   
                   <div className="space-y-1">
-                    <p className="text-gray-700 text-sm">文件名: {imageInfo.name}</p>
-                    <p className="text-gray-700 text-sm">尺寸: {imageInfo.width} x {imageInfo.height}px</p>
-                    <p className="text-gray-700 text-sm">格式: {imageInfo.format}</p>
-                    <p className="text-gray-700 text-sm">文件大小: {(imageInfo.size / 1024).toFixed(2)}KB</p>
+                    <p className="text-gray-700 text-sm">文件名: {imageInfoList[currentImageIndex].name}</p>
+                    <p className="text-gray-700 text-sm">尺寸: {imageInfoList[currentImageIndex].width} x {imageInfoList[currentImageIndex].height}px</p>
+                    <p className="text-gray-700 text-sm">格式: {imageInfoList[currentImageIndex].format}</p>
+                    <p className="text-gray-700 text-sm">文件大小: {(imageInfoList[currentImageIndex].size / 1024).toFixed(2)}KB</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 分隔条 */}
             <div
               className="hidden md:flex items-center justify-center w-4 cursor-col-resize group"
               onMouseDown={handleDragStart}
@@ -543,7 +833,6 @@ function App() {
               </div>
             </div>
 
-            {/* 设置区域 */}
             <div className="md:relative md:pl-4 min-w-[280px]"
                  style={{ width: `${100 - splitAreaWidth}%` }}>
               <div className="space-y-3">
@@ -601,20 +890,27 @@ function App() {
                 <div className="space-y-3">
                   <h3 className="font-semibold text-gray-900 text-sm">文件命名设置</h3>
                   
-                  {/* 文件名前缀设置 */}
-                  <div>
-                    <label className="block mb-1 text-gray-700 text-sm">文件名前缀</label>
-                    <input
-                      type="text"
-                      value={namePattern}
-                      onChange={(e) => setNamePattern(e.target.value)}
-                      className="border rounded p-1.5 w-full text-sm"
-                      placeholder="输入文件名前缀（默认使用原文件名）"
-                    />
-                    <p className="text-sm text-gray-500 mt-1">
-                      默认使用原文件名作为前缀，可以根据需要修改
-                    </p>
-                  </div>
+                  {(splitMode === 'custom' || imageInfoList.length === 1) ? (
+                    <div>
+                      <label className="block mb-1 text-gray-700 text-sm">文件名前缀</label>
+                      <input
+                        type="text"
+                        value={namePattern}
+                        onChange={(e) => setNamePattern(e.target.value)}
+                        className="border rounded p-1.5 w-full text-sm"
+                        placeholder="输入文件名前缀（默认使用原文件名）"
+                      />
+                      <p className="text-sm text-gray-500 mt-1">
+                        默认使用原文件名作为前缀，可以根据需要修改
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded p-3">
+                      <p className="text-sm text-gray-600">
+                        批量处理模式下将使用原文件名作为前缀
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block mb-1 text-gray-700 text-sm">序号位数</label>
@@ -658,8 +954,7 @@ function App() {
                   </select>
                 </div>
 
-                {/* 自定义模式下的切片尺寸信息 */}
-                {splitMode === 'custom' && imageInfo && (
+                {splitMode === 'custom' && imageInfoList[currentImageIndex] && (
                   <div className="space-y-2">
                     <h3 className="font-semibold text-gray-900 text-sm">切分后图片尺寸</h3>
                     <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-[200px] overflow-y-auto">
@@ -678,26 +973,45 @@ function App() {
                   </div>
                 )}
 
-                <button
-                  onClick={splitImage}
-                  className="w-full bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 transition-colors text-sm"
-                >
-                  切分并下载
-                </button>
+                {splitMode === 'custom' && imageInfoList.length > 1 ? (
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => splitSingleImage(imageInfoList[currentImageIndex])}
+                      className="w-full bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 transition-colors text-sm"
+                    >
+                      切分并下载当前图片
+                    </button>
+                    <button
+                      onClick={splitImage}
+                      className="w-full bg-green-500 text-white px-3 py-1.5 rounded hover:bg-green-600 transition-colors text-sm"
+                    >
+                      切分并下载所有图片
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">
+                      提示：下载所有图片时将使用每张图片的原文件名作为前缀
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={splitImage}
+                    className="w-full bg-blue-500 text-white px-3 py-1.5 rounded hover:bg-blue-600 transition-colors text-sm"
+                  >
+                    切分并下载
+                  </button>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* 全屏预览模态框 */}
-        {showFullImage && (
+        {showImageList && (
           <div 
             className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-            onClick={() => setShowFullImage(false)}
+            onClick={() => setShowImageList(false)}
           >
             <div className="relative max-w-[90vw] max-h-[90vh]">
               <img
-                src={URL.createObjectURL(imageInfo.file)}
+                src={URL.createObjectURL(imageInfoList[currentImageIndex].file)}
                 alt="Original"
                 className="max-w-full max-h-[90vh] object-contain"
               />
@@ -705,7 +1019,7 @@ function App() {
                 className="absolute top-4 right-4 bg-white rounded-full p-2"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setShowFullImage(false);
+                  setShowImageList(false);
                 }}
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

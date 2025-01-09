@@ -118,6 +118,28 @@ const handlePreviewMouseMove = (e: MouseEvent) => void
 const handlePreviewMouseUp = () => void
 \`\`\`
 
+### 图片显示控制
+
+#### handleImageScroll
+处理图片预览区域的滚动行为
+\`\`\`typescript
+const handleImageScroll = (e: WheelEvent) => void
+\`\`\`
+功能：
+- 控制图片预览区域的滚动行为
+- 防止滚动事件冒泡
+- 维持图片居中显示
+
+#### centerImage
+居中显示图片
+\`\`\`typescript
+const centerImage = () => void
+\`\`\`
+功能：
+- 计算并设置图片在预览区域的居中位置
+- 在图片选择或窗口大小改变时自动调用
+- 优化用户体验
+
 ## 状态定义
 
 ### 图片信息

@@ -1,23 +1,26 @@
 {
   "name": "image-splitter",
   "version": "1.0.0",
+  "homepage": "https://mokmoth.github.io/image-splitter",
   "private": true,
   "dependencies": {
+    "autoprefixer": "^10.x.x",
+    "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
+    "postcss": "^8.x.x",
     "react": "^18.x.x",
     "react-dom": "^18.x.x",
+    "react-dropzone": "^14.3.5",
     "react-scripts": "5.x.x",
-    "react-dropzone": "^14.x.x",
-    "file-saver": "^2.x.x",
-    "jszip": "^3.x.x",
-    "tailwindcss": "^3.x.x",
-    "autoprefixer": "^10.x.x",
-    "postcss": "^8.x.x"
+    "tailwindcss": "^3.x.x"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -36,5 +39,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
   }
 }

@@ -6,6 +6,9 @@
 - App.js: 主组件，包含所有功能实现
   - 文件上传区域（使用 react-dropzone）
   - 预览区域（使用 Canvas 实现）
+    - 图片居中显示
+    - 滚动行为优化
+    - 自适应缩放
   - 设置区域（切分配置和输出设置）
 
 ### 状态管理
@@ -14,6 +17,7 @@
 - 切分设置状态 (splitDirection, splitMode, splitSize, splitCount, customSlices)
 - 输出设置状态 (outputFormat, namePattern, numberDigits, separator)
 - UI 交互状态 (splitAreaWidth, draggingSliceIndex, showSliceSizes, justFinishedDragging)
+- 预览控制状态 (scrollPosition, imageCenter)
 
 ## 核心功能实现
 
@@ -32,6 +36,12 @@
 - 支持自适应缩放
 - 支持全屏预览原图
 - 自定义模式下支持拖动分割线
+
+### 图片显示优化
+- 实现图片居中显示功能
+- 优化滚动行为，防止意外重置
+- 添加窗口大小变化响应
+- 优化图片选择后的显示效果
 
 ## 开发规范
 
