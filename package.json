@@ -4,14 +4,12 @@
   "homepage": "https://mokmoth.github.io/image-splitter",
   "private": true,
   "dependencies": {
-    "autoprefixer": "^10.x.x",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
-    "postcss": "^8.x.x",
     "react": "^18.x.x",
     "react-dom": "^18.x.x",
     "react-dropzone": "^14.3.5",
-    "react-scripts": "5.x.x",
+    "react-scripts": "^5.0.1",
     "tailwindcss": "^3.x.x"
   },
   "scripts": {
@@ -41,6 +39,24 @@
     ]
   },
   "devDependencies": {
-    "gh-pages": "^6.3.0"
+    "@babel/plugin-transform-class-properties": "^7.25.9",
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.26.5",
+    "@babel/plugin-transform-numeric-separator": "^7.25.9",
+    "@babel/plugin-transform-optional-chaining": "^7.25.9",
+    "@babel/plugin-transform-private-methods": "^7.25.9",
+    "@svgr/webpack": "^8.1.0",
+    "autoprefixer": "^10.4.20",
+    "css-select": "^5.1.0",
+    "gh-pages": "^6.3.0",
+    "html-webpack-plugin": "^4.5.2",
+    "node-forge": "^1.3.1",
+    "nth-check": "^2.1.1",
+    "postcss": "^8.4.49",
+    "postcss-preset-env": "^10.1.3",
+    "resolve-url-loader": "^5.0.0",
+    "serialize-javascript": "^6.0.2",
+    "shell-quote": "^1.8.2",
+    "svgo": "^3.3.2",
+    "tough-cookie": "^5.1.0"
   }
 }

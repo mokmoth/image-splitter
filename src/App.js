@@ -72,6 +72,11 @@ function App() {
   const [justFinishedDragging, setJustFinishedDragging] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
+  /**
+   * 存储每张图片的切分位置
+   */
+  const [imageCustomSlices, setImageCustomSlices] = useState({});
+
   // ===== Refs =====
   /**
    * previewCanvasRef: 预览画布的引用，用于绘制预览图
@@ -81,6 +86,9 @@ function App() {
   const previewCanvasRef = useRef(null);
   const isDraggingRef = useRef(false);
   const containerRef = useRef(null);
+
+  // ===== 添加新的状态来跟踪已编辑的图片 =====
+  const [editedImages, setEditedImages] = useState(new Set());
 
   /**
    * 文件上传处理函数
@@ -205,7 +213,7 @@ function App() {
    * 初始化自定义切分位置
    * 根据指定的切分数量生成均匀分布的切分位置
    */
-  const initializeCustomSlices = (count) => {
+  const initializeCustomSlices = (count, imageId) => {
     const slices = [];
     const interval = 100 / count;
     
@@ -213,7 +221,10 @@ function App() {
       slices.push(i * interval);
     }
     
-    setCustomSlices(slices);
+    setImageCustomSlices(prev => ({
+      ...prev,
+      [imageId]: slices
+    }));
   };
 
   /**
@@ -233,7 +244,7 @@ function App() {
           {images.map((img, index) => (
             <div
               key={`${img.name}-${index}`}
-              className={`p-2 rounded cursor-pointer transition-colors
+              className={`p-2 rounded cursor-pointer transition-colors relative
                 ${index === currentIndex
                   ? 'bg-blue-100 border-blue-500'
                   : 'bg-white hover:bg-gray-100'
@@ -251,6 +262,11 @@ function App() {
                   className="absolute inset-0 w-full h-full object-cover rounded"
                   loading="lazy"
                 />
+                {editedImages.has(img.file.name) && (
+                  <div className="absolute top-1 right-1 w-3 h-3 bg-green-500 rounded-full" 
+                       title="已编辑">
+                  </div>
+                )}
               </div>
               <p className="text-xs mt-1 truncate">{img.name}</p>
             </div>
@@ -258,6 +274,12 @@ function App() {
         </div>
         <div className="text-xs text-gray-500 mt-2">
           提示：使用左右键或鼠标滚轮浏览图片列表
+          {splitMode === 'custom' && (
+            <span className="ml-2">
+              • <span className="inline-block w-2 h-2 bg-green-500 rounded-full align-middle mr-1"></span>
+              表示已编辑
+            </span>
+          )}
         </div>
       </div>
     );
@@ -369,13 +391,8 @@ function App() {
       // 根据不同模式计算切分位置
       let slicePositions;
       if (splitMode === 'custom') {
-        // 自定义模式：当前图片使用自定义位置，其他图片使用均分
-        if (imageInfo === imageInfoList[currentImageIndex]) {
-          slicePositions = [0, ...customSlices.map(pos => pos / 100), 1];
-        } else {
-          const count = customSlices.length + 1;
-          slicePositions = Array.from({ length: count + 1 }, (_, i) => i / count);
-        }
+        const imageSlices = imageCustomSlices[imageInfo.file.name] || [];
+        slicePositions = [0, ...imageSlices.map(pos => pos / 100), 1];
       } else if (splitMode === 'fixed') {
         // 固定尺寸模式：根据指定像素计算位置
         const totalSize = splitDirection === 'horizontal' ? imageInfo.width : imageInfo.height;
@@ -436,17 +453,8 @@ function App() {
     saveAs(content, zipFileName);
   };
 
-  /**
-   * 预览图相关功能
-   * 处理预览图的绘制和分割线显示
-   * 
-   * 功能：
-   * 1. 计算并设置预览图尺寸
-   * 2. 绘制当前选中的图片
-   * 3. 根据切分模式显示分割线
-   * 4. 自定义模式下支持拖动分割线
-   */
-  useEffect(() => {
+  // 在 useEffect 外部定义渲染函数
+  const renderPreview = () => {
     if (!imageInfoList[currentImageIndex] || !previewCanvasRef.current) return;
 
     const canvas = previewCanvasRef.current;
@@ -466,7 +474,7 @@ function App() {
     canvas.width = previewWidth;
     canvas.height = previewHeight;
     ctx.drawImage(imageInfoList[currentImageIndex].image, 0, 0, previewWidth, previewHeight);
-    
+
     // 清理或创建覆盖层容器
     let overlayContainer = canvas.parentElement.querySelector('.overlay-container');
     if (overlayContainer) {
@@ -476,11 +484,19 @@ function App() {
       overlayContainer.className = 'overlay-container absolute inset-0 pointer-events-none';
       canvas.parentElement.appendChild(overlayContainer);
     }
-    
+
     // 计算分割线位置
     let slicePositions = [];
     if (splitMode === 'custom') {
-      slicePositions = customSlices;
+      const currentImage = imageInfoList[currentImageIndex];
+      const customSlices = imageCustomSlices[currentImage.file.name];
+      if (customSlices) {
+        slicePositions = customSlices;
+      } else {
+        slicePositions = Array.from({ length: splitCount - 1 }, (_, i) => 
+          ((i + 1) * 100) / splitCount
+        );
+      }
     } else if (splitMode === 'fixed') {
       const totalSize = splitDirection === 'horizontal' ? imageInfoList[currentImageIndex].width : imageInfoList[currentImageIndex].height;
       const sliceSize = splitSize;
@@ -488,7 +504,7 @@ function App() {
       slicePositions = Array.from({ length: count - 1 }, (_, i) => 
         Math.min(100, ((i + 1) * sliceSize * 100) / totalSize)
       );
-    } else { // count mode
+    } else {
       slicePositions = Array.from({ length: splitCount - 1 }, (_, i) => 
         ((i + 1) * 100) / splitCount
       );
@@ -499,7 +515,6 @@ function App() {
       const line = document.createElement('div');
       
       if (splitMode === 'custom') {
-        // 自定义模式下的分割线样式：可交互
         line.className = `absolute pointer-events-auto bg-red-500/50 hover:bg-blue-500 
           transition-colors group`;
         
@@ -507,7 +522,6 @@ function App() {
           line.className += ' w-[3px] h-full -ml-[1.5px]';
           line.style.left = `${slice}%`;
           
-          // 添加拖动手柄
           const handle = document.createElement('div');
           handle.className = `absolute bottom-0 left-1/2 -translate-x-1/2 
             w-4 h-4 bg-white border-2 border-red-500 rounded-full 
@@ -518,7 +532,6 @@ function App() {
           line.className += ' h-[3px] w-full -mt-[1.5px]';
           line.style.top = `${slice}%`;
           
-          // 添加拖动手柄
           const handle = document.createElement('div');
           handle.className = `absolute right-0 top-1/2 -translate-y-1/2 
             w-4 h-4 bg-white border-2 border-red-500 rounded-full 
@@ -527,14 +540,12 @@ function App() {
           line.appendChild(handle);
         }
 
-        // 添加拖动事件监听
         line.addEventListener('mousedown', (e) => {
           setDraggingSliceIndex(index);
           document.body.style.cursor = splitDirection === 'horizontal' ? 'col-resize' : 'row-resize';
           e.preventDefault();
         });
       } else {
-        // 非自定义模式下的分割线样式：纯展示
         line.className = 'absolute pointer-events-none';
         
         if (splitDirection === 'horizontal') {
@@ -548,15 +559,7 @@ function App() {
 
       overlayContainer.appendChild(line);
     });
-
-    // 清理函数
-    return () => {
-      const overlayContainer = canvas.parentElement?.querySelector('.overlay-container');
-      if (overlayContainer) {
-        overlayContainer.remove();
-      }
-    };
-  }, [imageInfoList, currentImageIndex, splitDirection, splitMode, splitSize, splitCount, customSlices]);
+  };
 
   /**
    * 拖动相关事件处理
@@ -579,6 +582,9 @@ function App() {
     // 计算宽度百分比（限制在20-80%之间）
     const newWidth = Math.min(80, Math.max(20, (mouseX / containerWidth) * 100));
     setSplitAreaWidth(newWidth);
+    
+    // 立即重新渲染预览图
+    requestAnimationFrame(renderPreview);
   };
 
   const handleDragEnd = () => {
@@ -594,6 +600,10 @@ function App() {
   const handlePreviewMouseMove = (e) => {
     if (splitMode !== 'custom' || draggingSliceIndex === null) return;
 
+    const currentImage = imageInfoList[currentImageIndex];
+    const currentImageId = currentImage.file.name;
+    const currentSlices = imageCustomSlices[currentImageId] || [];
+
     const canvas = previewCanvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const isHorizontal = splitDirection === 'horizontal';
@@ -607,17 +617,23 @@ function App() {
     }
 
     // 限制拖动范围
-    const minPos = draggingSliceIndex > 0 ? customSlices[draggingSliceIndex - 1] + 1 : 1;
-    const maxPos = draggingSliceIndex < customSlices.length - 1 
-      ? customSlices[draggingSliceIndex + 1] - 1 
+    const minPos = draggingSliceIndex > 0 ? currentSlices[draggingSliceIndex - 1] + 1 : 1;
+    const maxPos = draggingSliceIndex < currentSlices.length - 1 
+      ? currentSlices[draggingSliceIndex + 1] - 1 
       : 99;
     
     position = Math.max(minPos, Math.min(maxPos, position));
 
-    // 更新分割线位置
-    const newSlices = [...customSlices];
+    // 更新特定图片的切分位置
+    const newSlices = [...currentSlices];
     newSlices[draggingSliceIndex] = position;
-    setCustomSlices(newSlices);
+    setImageCustomSlices(prev => ({
+      ...prev,
+      [currentImageId]: newSlices
+    }));
+    
+    // 标记图片已编辑
+    setEditedImages(prev => new Set([...prev, currentImageId]));
   };
 
   const handlePreviewMouseUp = () => {
@@ -668,7 +684,7 @@ function App() {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [splitMode, draggingSliceIndex, customSlices]);
+  }, [splitMode, draggingSliceIndex, imageCustomSlices]);
 
   /**
    * 复制图片信息功能
@@ -699,7 +715,18 @@ function App() {
     const newMode = e.target.value;
     setSplitMode(newMode);
     if (newMode === 'custom') {
-      initializeCustomSlices(splitCount);
+      // 为所有图片初始化切分位置，使用默认值 4
+      setSplitCount(4);
+      const newImageCustomSlices = {};
+      imageInfoList.forEach(img => {
+        const slices = [];
+        const interval = 100 / 4;
+        for (let i = 1; i < 4; i++) {
+          slices.push(i * interval);
+        }
+        newImageCustomSlices[img.file.name] = slices;
+      });
+      setImageCustomSlices(newImageCustomSlices);
     }
   };
 
@@ -710,7 +737,9 @@ function App() {
   const calculateSliceSizes = () => {
     if (!imageInfoList[currentImageIndex]) return [];
     
-    const slices = [0, ...customSlices, 100];
+    const currentImage = imageInfoList[currentImageIndex];
+    const currentSlices = imageCustomSlices[currentImage.file.name] || [];
+    const slices = [0, ...currentSlices, 100];
     const sizes = [];
     
     for (let i = 0; i < slices.length - 1; i++) {
@@ -719,17 +748,17 @@ function App() {
       const percentage = end - start;
       
       if (splitDirection === 'horizontal') {
-        const width = Math.round((percentage / 100) * imageInfoList[currentImageIndex].width);
+        const width = Math.round((percentage / 100) * currentImage.width);
         sizes.push({
           index: i + 1,
           width,
-          height: imageInfoList[currentImageIndex].height
+          height: currentImage.height
         });
       } else {
-        const height = Math.round((percentage / 100) * imageInfoList[currentImageIndex].height);
+        const height = Math.round((percentage / 100) * currentImage.height);
         sizes.push({
           index: i + 1,
-          width: imageInfoList[currentImageIndex].width,
+          width: currentImage.width,
           height
         });
       }
@@ -748,9 +777,37 @@ function App() {
     
     // 如果是自定义模式，则重新初始化分割线
     if (splitMode === 'custom') {
-      initializeCustomSlices(newCount);
+      initializeCustomSlices(newCount, imageInfoList[currentImageIndex].file.name);
     }
   };
+
+  /**
+   * 修改 setCurrentImageIndex 的调用方式，确保切换图片时初始化切分线
+   * @param {number} index - 要选择的图片索引
+   */
+  const handleImageSelect = (index) => {
+    setCurrentImageIndex(index);
+    
+    // 如果是自定义模式
+    if (splitMode === 'custom') {
+      const currentImage = imageInfoList[index];
+      const currentImageSlices = imageCustomSlices[currentImage.file.name];
+      
+      if (currentImageSlices) {
+        // 如果该图片已有切分设置，更新 splitCount 以匹配现有的切分线数量
+        setSplitCount(currentImageSlices.length + 1);
+      } else {
+        // 如果该图片没有切分设置，使用默认值 4 初始化
+        setSplitCount(4);
+        initializeCustomSlices(4, currentImage.file.name);
+      }
+    }
+  };
+
+  // 修改预览图相关的 useEffect
+  useEffect(() => {
+    renderPreview();
+  }, [imageInfoList, currentImageIndex, splitDirection, splitMode, splitSize, splitCount, imageCustomSlices, splitAreaWidth]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
@@ -766,7 +823,7 @@ function App() {
           <ImageList
             images={imageInfoList}
             currentIndex={currentImageIndex}
-            onSelect={setCurrentImageIndex}
+            onSelect={handleImageSelect}
           />
         )}
 

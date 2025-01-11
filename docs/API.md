@@ -1,187 +1,52 @@
-# API 文档
+# Image Splitter API 文档
 
-## 核心函数
+## 主要功能
 
-### 图片上传处理
+### 图片处理
+- 支持多图片上传（拖拽或点击选择）
+- 支持 JPEG、PNG、WebP 等常见图片格式
+- 实时预览切分效果
+- 支持批量处理多张图片
 
-#### onDrop
-处理图片文件上传
-\`\`\`typescript
-const onDrop = async (acceptedFiles: File[]) => void
-\`\`\`
-参数：
-- acceptedFiles: 用户选择或拖放的文件数组
+### 切分模式
+1. 均分模式（count）
+   - 按指定数量平均切分图片
+   - 支持 2-10 份切分
 
-返回：void
+2. 固定尺寸模式（fixed）
+   - 按指定像素大小切分图片
+   - 自动计算切分数量
 
-使用示例：
-\`\`\`typescript
-const { getRootProps, getInputProps } = useDropzone({
-  accept: {
-    'image/*': ['.jpeg', '.jpg', '.png', '.webp']
-  },
-  multiple: false,
-  onDrop
-});
-\`\`\`
+3. 自定义模式（custom）
+   - 通过拖动分割线自定义切分位置
+   - 支持为每张图片单独设置切分位置
+   - 默认切分为 4 份
+   - 可调整切分数量
+   - 保存每张图片的切分设置
 
-### 图片切分功能
+### 切分方向
+- 支持横向（horizontal）和纵向（vertical）切分
 
-#### splitImage
-执行图片切分操作
-\`\`\`typescript
-const splitImage = async () => void
-\`\`\`
-功能：
-- 根据当前设置对图片进行切分
-- 生成多个图片切片
-- 打包为 ZIP 文件并下载
+### 输出设置
+- 支持自定义输出文件名前缀
+- 可配置序号位数（1-10）
+- 可自定义连接符
+- 支持多种输出格式（JPEG、PNG、WebP）
+- ZIP 打包下载
 
-使用示例：
-\`\`\`jsx
-<button onClick={splitImage}>切分并下载</button>
-\`\`\`
+## 状态管理
+主要状态包括：
+- imageInfoList：图片信息列表
+- currentImageIndex：当前选中图片索引
+- splitDirection：切分方向
+- splitMode：切分模式
+- splitCount：切分数量
+- imageCustomSlices：每张图片的自定义切分位置
+- editedImages：已编辑图片记录
 
-### 预览相关
-
-#### initializeCustomSlices
-初始化自定义切分位置
-\`\`\`typescript
-const initializeCustomSlices = (count: number) => void
-\`\`\`
-参数：
-- count: 切分数量
-
-使用示例：
-\`\`\`typescript
-if (splitMode === 'custom') {
-  initializeCustomSlices(splitCount);
-}
-\`\`\`
-
-#### calculateSliceSizes
-计算切片尺寸信息
-\`\`\`typescript
-const calculateSliceSizes = () => Array<{
-  index: number;
-  width: number;
-  height: number;
-}>
-\`\`\`
-返回：包含每个切片尺寸信息的数组
-
-使用示例：
-\`\`\`typescript
-const sizes = calculateSliceSizes();
-sizes.map(size => console.log(\`\${size.width} x \${size.height}px\`));
-\`\`\`
-
-### 工具函数
-
-#### getActualPosition
-计算实际图片中的位置
-\`\`\`typescript
-const getActualPosition = (
-  previewPos: number,
-  previewSize: number,
-  actualSize: number
-) => number
-\`\`\`
-
-#### getPreviewPosition
-计算预览图中的位置
-\`\`\`typescript
-const getPreviewPosition = (
-  actualPos: number,
-  actualSize: number,
-  previewSize: number
-) => number
-\`\`\`
-
-### 事件处理
-
-#### handleDragStart
-开始拖动分隔条
-\`\`\`typescript
-const handleDragStart = () => void
-\`\`\`
-
-#### handlePreviewMouseMove
-处理预览区域鼠标移动
-\`\`\`typescript
-const handlePreviewMouseMove = (e: MouseEvent) => void
-\`\`\`
-
-#### handlePreviewMouseUp
-处理预览区域鼠标释放
-\`\`\`typescript
-const handlePreviewMouseUp = () => void
-\`\`\`
-
-### 图片显示控制
-
-#### handleImageScroll
-处理图片预览区域的滚动行为
-\`\`\`typescript
-const handleImageScroll = (e: WheelEvent) => void
-\`\`\`
-功能：
-- 控制图片预览区域的滚动行为
-- 防止滚动事件冒泡
-- 维持图片居中显示
-
-#### centerImage
-居中显示图片
-\`\`\`typescript
-const centerImage = () => void
-\`\`\`
-功能：
-- 计算并设置图片在预览区域的居中位置
-- 在图片选择或窗口大小改变时自动调用
-- 优化用户体验
-
-## 状态定义
-
-### 图片信息
-\`\`\`typescript
-interface ImageInfo {
-  file: File;
-  name: string;
-  width: number;
-  height: number;
-  format: string;
-  size: number;
-  image: HTMLImageElement;
-}
-\`\`\`
-
-### 切片尺寸信息
-\`\`\`typescript
-interface SliceSize {
-  index: number;
-  width: number;
-  height: number;
-}
-\`\`\`
-
-## 事件流程
-
-### 图片上传流程
-1. 用户拖放或选择图片
-2. onDrop 函数处理文件
-3. 创建图片对象并加载
-4. 设置 imageInfo 状态
-5. 设置默认文件名前缀
-
-### 切分流程
-1. 用户配置切分参数
-2. 点击切分按钮
-3. splitImage 函数执行切分
-4. 生成切片图片
-5. 打包并下载
-
-### 预览交互流程
-1. 图片加载后自动生成预览
-2. 用户可调整预览区域大小
-3. 自定义模式下可拖动分割线
-4. 实时更新预览效果
+## 交互功能
+- 拖拽调整预览区域大小
+- 拖动分割线调整切分位置
+- 键盘导航支持（切换图片）
+- 图片信息复制
+- 编辑状态标记
